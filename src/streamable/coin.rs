@@ -8,8 +8,11 @@ type Bytes32 = [u8; 32];
 #[pyclass(subclass, unsendable)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Coin {
+    #[pyo3(get)]
     parent_coin_info: Bytes32,
+    #[pyo3(get)]
     puzzle_hash: Bytes32,
+    #[pyo3(get)]
     amount: u64,
 }
 
@@ -43,19 +46,5 @@ impl Coin {
 
     pub fn __bytes__<'p>(&self, py: Python<'p>) -> PyResult<&'p PyBytes> {
         Ok(PyBytes::new(py, &self.to_bytes()))
-    }
-
-    #[getter]
-    pub fn parent_coin_info(&self) -> &[u8] {
-        &self.parent_coin_info
-    }
-
-    #[getter]
-    pub fn puzzle_hash(&self) -> &[u8] {
-        &self.puzzle_hash
-    }
-    #[getter]
-    pub fn amount(&self) -> u64 {
-        self.amount
     }
 }
