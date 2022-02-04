@@ -1,13 +1,55 @@
-//use bincode::Options;
+use bincode::Options;
+use core::fmt::Formatter;
 use pyo3::prelude::*;
+use std::fmt::Debug;
 //use pyo3::types::PyBytes;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-type Bytes32 = [u8; 32];
+#[derive(Serialize, Deserialize)]
+struct Bytes16([u8; 16]);
+
+impl Debug for Bytes16 {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        formatter.write_str(&hex::encode(self.0))
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct Bytes32([u8; 32]);
+
+impl Debug for Bytes32 {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        formatter.write_str(&hex::encode(self.0))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Bytes48(Bytes32, Bytes16);
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Bytes96(Bytes32, Bytes32, Bytes32);
+
+#[derive(Serialize, Deserialize)]
+struct Bytes4([u8; 4]);
+
+impl Debug for Bytes4 {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        formatter.write_str(&hex::encode(self.0))
+    }
+}
 
 // TODO: this is a hack to eliminate the need to serialize manually
 #[derive(Serialize, Deserialize, Debug)]
-struct Bytes100([u8; 32], [u8; 32], [u8; 32], [u8; 4]);
+struct Bytes100(Bytes32, Bytes32, Bytes32, Bytes4);
+
+#[derive(Serialize, Deserialize)]
+struct Vecu8(Vec<u8>);
+
+impl Debug for Vecu8 {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        formatter.write_str(&hex::encode(&self.0))
+    }
+}
 
 #[pyclass(subclass, unsendable)]
 #[derive(Serialize, Deserialize, Debug)]
@@ -24,6 +66,20 @@ pub struct Fullblock {
     transactions_info: Option<TransactionsInfo>, //  # Reward chain foliage data (tx block additional)
     transactions_generator: Option<SerializedProgram>, //  # Program that generates transactions
     transactions_generator_ref_list: Vec<u32>, // List of block heights of previous generators referenced in this block
+}
+
+#[pymethods]
+impl Fullblock {
+    #[staticmethod]
+    pub fn from_bytes(blob: &[u8]) -> Self {
+        let chia = bincode::DefaultOptions::new()
+            .with_chia_int_encoding()
+            .allow_trailing_bytes()
+            .with_big_endian();
+        let t = chia.deserialize(blob).unwrap();
+        println!("{:?}", t);
+        t
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -55,7 +111,7 @@ pub struct RewardChainBlock {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VDFProof {
     witness_type: u8,
-    witness: Vec<u8>,
+    witness: Vecu8,
     normalized_to_identity: bool,
 }
 
@@ -148,7 +204,7 @@ pub struct ProofOfSpace {
     pool_contract_puzzle_hash: Option<Bytes32>,
     plot_public_key: G1Element,
     size: u8,
-    proof: Vec<u8>,
+    proof: Vecu8,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -180,10 +236,28 @@ pub struct ClassgroupElement {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct G1Element(Bytes32, [u8; 16]);
+pub struct G1Element(Bytes48);
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct G2Element(Bytes32, Bytes32, Bytes32);
+pub struct G2Element(Bytes96);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 pub struct SerializedProgram;
+
+impl Serialize for SerializedProgram {
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        todo!()
+    }
+}
+
+impl<'de> Deserialize<'de> for SerializedProgram {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        todo!()
+    }
+}

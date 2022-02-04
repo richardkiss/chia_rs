@@ -1,6 +1,5 @@
 use crate::fullblock::Fullblock;
 use crate::run_generator::__pyo3_get_function_run_generator;
-use crate::streamable::coin::Coin;
 use chia::gen::flags::COND_ARGS_NIL;
 use chia::gen::flags::COND_CANON_INTS;
 use chia::gen::flags::NO_UNKNOWN_CONDS;
