@@ -10,7 +10,7 @@ use super::opcodes::{
 use crate::flags::MEMPOOL_MODE;
 use crate::validation_error::{ErrorCode, ValidationErr, first};
 use chia_sha2::Sha256;
-use clvmr::chia_dialect::ENABLE_KECCAK_OPS_OUTSIDE_GUARD;
+use clvmr::chia_dialect::ClvmFlags;
 use clvmr::{Allocator, NodePtr, SExp};
 
 /// computes a hash of the atoms in a CLVM list. Only the `count` first items
@@ -60,7 +60,7 @@ pub fn compute_puzzle_fingerprint(
     // so it's trusted. It's OK to enable features that aren't available yet,
     // because if the puzzle would use them prematurely, the validation would
     // have failed.
-    let flags = MEMPOOL_MODE | ENABLE_KECCAK_OPS_OUTSIDE_GUARD;
+    let flags = MEMPOOL_MODE | ClvmFlags::ENABLE_KECCAK_OPS_OUTSIDE_GUARD.bits();
     let mut iter = conditions;
 
     let mut fingerprint = Sha256::new();

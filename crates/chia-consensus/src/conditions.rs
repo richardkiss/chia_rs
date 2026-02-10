@@ -3670,11 +3670,11 @@ fn final_message(
     use crate::make_aggsig_final_message::make_aggsig_final_message;
     use crate::owned_conditions::OwnedSpendConditions;
     use chia_protocol::Coin;
-    use clvmr::LIMIT_HEAP;
+    use clvmr::chia_dialect::ClvmFlags;
 
     let coin = Coin::new(Bytes32::from(parent), Bytes32::from(puzzle), amount);
 
-    let mut a: Allocator = make_allocator(LIMIT_HEAP);
+    let mut a: Allocator = make_allocator(ClvmFlags::LIMIT_HEAP.bits());
     let spend = SpendConditions::new(
         a.new_atom(parent.as_slice()).expect("should pass"),
         amount,

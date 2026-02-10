@@ -1,6 +1,6 @@
 use crate::allocator::make_allocator;
 use crate::consensus_constants::ConsensusConstants;
-use crate::flags::{COST_CONDITIONS, SIMPLE_GENERATOR};
+use crate::flags::{COST_CONDITIONS, INTERNED_GENERATOR, SIMPLE_GENERATOR};
 use crate::owned_conditions::OwnedSpendBundleConditions;
 use crate::spendbundle_conditions::run_spendbundle;
 use crate::validation_error::{ErrorCode, ValidationErr};
@@ -8,8 +8,8 @@ use chia_bls::GTElement;
 use chia_bls::{aggregate_verify_gt, hash_to_g2};
 use chia_protocol::SpendBundle;
 use chia_sha2::Sha256;
-use clvmr::chia_dialect::{CANONICAL_INTS, DISABLE_OP, ENABLE_KECCAK_OPS_OUTSIDE_GUARD};
-use clvmr::{LIMIT_HEAP, NodePtr};
+use clvmr::chia_dialect::ClvmFlags;
+use clvmr::NodePtr;
 
 // type definition makes clippy happy
 pub type ValidationPair = ([u8; 32], GTElement);
@@ -23,7 +23,7 @@ pub fn validate_clvm_and_signature(
     constants: &ConsensusConstants,
     flags: u32,
 ) -> Result<(OwnedSpendBundleConditions, Vec<ValidationPair>), ValidationErr> {
-    let mut a = make_allocator(LIMIT_HEAP);
+    let mut a = make_allocator(ClvmFlags::LIMIT_HEAP.bits());
     let (sbc, pkm_pairs) = run_spendbundle(&mut a, spend_bundle, max_cost, flags, constants)?;
     let conditions = OwnedSpendBundleConditions::from(&a, sbc);
 
@@ -89,12 +89,15 @@ pub fn get_flags_for_height_and_constants(
     // In hard fork 2, we enable the keccak operator outside the softfork guard
     let mut flags: u32 = 0;
     if prev_tx_height >= constants.hard_fork2_height {
-        flags |=
-            ENABLE_KECCAK_OPS_OUTSIDE_GUARD | COST_CONDITIONS | SIMPLE_GENERATOR | CANONICAL_INTS;
+        flags |= ClvmFlags::ENABLE_KECCAK_OPS_OUTSIDE_GUARD.bits()
+            | COST_CONDITIONS
+            | SIMPLE_GENERATOR
+            | ClvmFlags::CANONICAL_INTS.bits()
+            | INTERNED_GENERATOR;
     }
 
     if prev_tx_height >= constants.soft_fork8_height {
-        flags |= DISABLE_OP;
+        flags |= ClvmFlags::DISABLE_OP.bits();
     }
     flags
 }

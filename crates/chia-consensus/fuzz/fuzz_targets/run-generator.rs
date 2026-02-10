@@ -4,11 +4,11 @@ use chia_consensus::allocator::make_allocator;
 use chia_consensus::consensus_constants::TEST_CONSTANTS;
 use chia_consensus::run_block_generator::{run_block_generator, run_block_generator2};
 use chia_consensus::validation_error::{ErrorCode, ValidationErr};
-use clvmr::chia_dialect::LIMIT_HEAP;
+use clvmr::chia_dialect::ClvmFlags;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    let mut a1 = make_allocator(LIMIT_HEAP);
+    let mut a1 = make_allocator(ClvmFlags::LIMIT_HEAP.bits());
     let r1 = run_block_generator::<&[u8], _>(
         &mut a1,
         data,
@@ -21,7 +21,7 @@ fuzz_target!(|data: &[u8]| {
     );
     drop(a1);
 
-    let mut a2 = make_allocator(LIMIT_HEAP);
+    let mut a2 = make_allocator(ClvmFlags::LIMIT_HEAP.bits());
     let r2 = run_block_generator2::<&[u8], _>(
         &mut a2,
         data,
