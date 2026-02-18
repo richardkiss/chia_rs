@@ -2,11 +2,14 @@
 //!
 //! One pass over the interned tree to compute cost; no separate stats struct.
 
-use clvmr::allocator::{Allocator, NodePtr};
+use chia_protocol::Bytes32;
+
+use std::collections::HashMap;
+
+use clvmr::allocator::{Allocator, NodePtr, SExp};
 use clvmr::error::EvalErr;
-use clvmr::serde::{intern, InternedTree};
 use clvmr::serde::node_from_bytes_backrefs;
-use clvmr::serde::Bytes32;
+use clvmr::serde::{InternedTree, intern};
 
 type Result<T> = std::result::Result<T, EvalErr>;
 
@@ -44,11 +47,45 @@ pub fn total_cost_from_tree(tree: &InternedTree) -> u64 {
     size_cost * SIZE_COST_PER_BYTE + sha_cost * SHA_COST_PER_UNIT
 }
 
+/// Compute per-node reference counts for an interned tree.
+///
+/// Returns how many times each node is referenced in the DAG:
+/// the root gets +1, and each pair's left/right children each get +1.
+///
+/// This is O(unique_pairs) and enables computing an upper bound on
+/// compressed serialized size via the formula:
+///
+/// ```text
+/// ub = Σ_atoms [ser_len(a) + (ref(a)-1) × min(C_backref, ser_len(a))]
+///    + Σ_pairs [1 + (ref(p)-1) × C_backref]
+/// ```
+pub fn ref_counts(tree: &InternedTree) -> HashMap<NodePtr, u32> {
+    let mut counts: HashMap<NodePtr, u32> =
+        HashMap::with_capacity(tree.atoms.len() + tree.pairs.len());
+    for &a in &tree.atoms {
+        counts.insert(a, 0);
+    }
+    for &p in &tree.pairs {
+        counts.insert(p, 0);
+    }
+    *counts.get_mut(&tree.root).expect("root must be in counts") += 1;
+    for &p in &tree.pairs {
+        match tree.allocator.sexp(p) {
+            SExp::Pair(l, r) => {
+                *counts.get_mut(&l).expect("left child must be in counts") += 1;
+                *counts.get_mut(&r).expect("right child must be in counts") += 1;
+            }
+            SExp::Atom => unreachable!("pairs list should only contain pairs"),
+        }
+    }
+    counts
+}
+
 /// Result of processing a generator.
 #[derive(Debug)]
 pub struct GeneratorInfo {
     pub tree: InternedTree,
-    pub tree_hash: Bytes32,
+    pub tree_hash: [u8; 32],
     pub cost: u64,
 }
 
@@ -81,7 +118,7 @@ pub fn intern_cost(allocator: &Allocator, node: NodePtr) -> Result<u64> {
 /// Returns (total_cost, tree_hash).
 pub fn generator_cost_and_hash(allocator: &Allocator, node: NodePtr) -> Result<(u64, Bytes32)> {
     let info = process_generator(allocator, node)?;
-    Ok((info.cost, info.tree_hash))
+    Ok((info.cost, info.tree_hash.into()))
 }
 
 /// From serialized bytes: (cost, tree_hash).
@@ -94,7 +131,7 @@ pub fn cost_and_tree_hash_for_bytes(blob: &[u8]) -> Result<(u64, Bytes32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clvmr::serde::node_from_bytes;
+    use clvmr::serde::{intern, node_from_bytes};
 
     #[test]
     fn test_empty_atom() {
@@ -153,5 +190,50 @@ mod tests {
         let node = node_from_bytes(&mut allocator, &blob).unwrap();
         let (_cost2, hash2) = generator_cost_and_hash(&allocator, node).unwrap();
         assert_eq!(hash, hash2);
+    }
+
+    #[test]
+    fn test_ref_counts_single_atom() {
+        let allocator = Allocator::new();
+        let node = allocator.nil();
+
+        let tree = intern(&allocator, node).unwrap();
+        let counts = ref_counts(&tree);
+
+        assert_eq!(counts[&tree.root], 1);
+    }
+
+    #[test]
+    fn test_ref_counts_shared_atom() {
+        // (A . A) — atom referenced twice
+        let mut allocator = Allocator::new();
+        let a = allocator.new_atom(&[42]).unwrap();
+        let node = allocator.new_pair(a, a).unwrap();
+
+        let tree = intern(&allocator, node).unwrap();
+        let counts = ref_counts(&tree);
+
+        assert_eq!(counts[&tree.root], 1); // root pair
+        assert_eq!(counts[&tree.atoms[0]], 2); // atom referenced by both children
+    }
+
+    #[test]
+    fn test_ref_counts_shared_pair() {
+        // ((A . B) . (A . B)) — inner pair referenced twice
+        let mut allocator = Allocator::new();
+        let a = allocator.new_atom(&[1]).unwrap();
+        let b = allocator.new_atom(&[2]).unwrap();
+        let p1 = allocator.new_pair(a, b).unwrap();
+        let p2 = allocator.new_pair(a, b).unwrap();
+        let node = allocator.new_pair(p1, p2).unwrap();
+
+        let tree = intern(&allocator, node).unwrap();
+        let counts = ref_counts(&tree);
+
+        let inner_pair = tree.pairs[0]; // post-order: inner before outer
+        assert_eq!(counts[&tree.atoms[0]], 1); // A: from inner pair
+        assert_eq!(counts[&tree.atoms[1]], 1); // B: from inner pair
+        assert_eq!(counts[&inner_pair], 2); // inner pair: left + right of outer
+        assert_eq!(counts[&tree.root], 1); // outer pair: root
     }
 }

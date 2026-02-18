@@ -69,7 +69,7 @@ mod test {
     use clvm_utils::tree_hash;
     use clvmr::reduction::Reduction;
     use clvmr::serde::node_from_bytes_backrefs;
-    use clvmr::{ChiaDialect, run_program};
+    use clvmr::{ChiaDialect, ClvmFlags, run_program};
     use rstest::rstest;
     use std::collections::HashSet;
     use std::fs;
@@ -251,7 +251,7 @@ mod test {
                 .map(|c| (c.puzzle_hash, c.amount))
                 .collect();
 
-            let dialect = &ChiaDialect::new(MEMPOOL_MODE);
+            let dialect = &ChiaDialect::new(ClvmFlags::from_bits_truncate(MEMPOOL_MODE));
             let args = setup_generator_args(&mut a2, blocks, 0).expect("setup_generator_args");
             let Reduction(_, result) =
                 run_program(&mut a2, dialect, generator_node, args, MAX_COST)

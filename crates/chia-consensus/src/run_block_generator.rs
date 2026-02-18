@@ -125,7 +125,7 @@ where
     let args = a.new_pair(args, a.nil())?;
     let args = a.new_pair(program, args)?;
 
-    let dialect = ChiaDialect::new(flags);
+    let dialect = ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
     let Reduction(clvm_cost, generator_output) =
         run_program(a, &dialect, rom_generator, args, cost_left)?;
 
@@ -183,7 +183,7 @@ where
     check_generator_node(&allocator, program_interned, flags)?;
 
     let args = setup_generator_args(&mut allocator, block_refs, flags)?;
-    let dialect = ChiaDialect::new(flags);
+    let dialect = ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
 
     let Reduction(clvm_cost, all_spends) =
         run_program(&mut allocator, &dialect, program_interned, args, cost_left)?;
@@ -346,7 +346,7 @@ where
     check_generator_node(a, program, flags)?;
 
     let args = setup_generator_args(a, block_refs, flags)?;
-    let dialect = ChiaDialect::new(flags);
+    let dialect = ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
 
     let Reduction(clvm_cost, all_spends) = run_program(a, &dialect, program, args, cost_left)?;
 
@@ -434,7 +434,7 @@ where
     let program = node_from_bytes_backrefs(&mut a, generator)?;
     check_generator_node(&a, program, flags)?;
     let args = setup_generator_args(&mut a, refs, flags)?;
-    let dialect = ChiaDialect::new(flags);
+    let dialect = ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
 
     let Reduction(_clvm_cost, res) = run_program(
         &mut a,
@@ -533,7 +533,7 @@ where
     let program = node_from_bytes_backrefs(&mut a, generator)?;
     check_generator_node(&a, program, flags)?;
     let args = setup_generator_args(&mut a, refs, flags)?;
-    let dialect = ChiaDialect::new(flags);
+    let dialect = ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
 
     let Reduction(_clvm_cost, res) = run_program(
         &mut a,

@@ -9,7 +9,7 @@ use chia_protocol::{Bytes, Bytes32};
 use clvm_traits::FromClvm;
 use clvm_utils::{TreeCache, tree_hash_cached};
 use clvmr::allocator::NodePtr;
-use clvmr::chia_dialect::ChiaDialect;
+use clvmr::chia_dialect::{ChiaDialect, ClvmFlags};
 use clvmr::reduction::Reduction;
 use clvmr::run_program::run_program;
 use clvmr::serde::node_from_bytes_backrefs;
@@ -37,7 +37,7 @@ where
     let program = node_from_bytes_backrefs(&mut a, program)?;
 
     let args = setup_generator_args(&mut a, block_refs, flags)?;
-    let dialect = ChiaDialect::new(flags);
+    let dialect = ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
 
     let Reduction(clvm_cost, all_spends) = run_program(&mut a, &dialect, program, args, cost_left)?;
 

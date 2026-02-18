@@ -1,7 +1,7 @@
 use crate::error::{map_pyerr, map_pyerr_w_ptr};
 use chia_consensus::allocator::make_allocator;
 use chia_protocol::LazyNode;
-use clvmr::chia_dialect::ChiaDialect;
+use clvmr::chia_dialect::{ChiaDialect, ClvmFlags};
 use clvmr::cost::Cost;
 use clvmr::reduction::Response;
 use clvmr::run_program::run_program;
@@ -46,7 +46,7 @@ pub fn run_chia_program(
             .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
         let args = node_from_bytes_backrefs(&mut allocator, args)
             .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
-        let dialect = ChiaDialect::new(flags);
+        let dialect = ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
 
         Ok(py.detach(|| run_program(&mut allocator, &dialect, program, args, max_cost)))
     })()?

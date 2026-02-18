@@ -3,7 +3,9 @@ use crate::conditions::{
     validate_conditions,
 };
 use crate::consensus_constants::ConsensusConstants;
-use crate::flags::{COMPUTE_FINGERPRINT, DONT_VALIDATE_SIGNATURE, INTERNED_GENERATOR, MEMPOOL_MODE};
+use crate::flags::{
+    COMPUTE_FINGERPRINT, DONT_VALIDATE_SIGNATURE, INTERNED_GENERATOR, MEMPOOL_MODE,
+};
 use crate::generator_cost::total_cost_from_tree;
 use crate::puzzle_fingerprint::compute_puzzle_fingerprint;
 use crate::run_block_generator::subtract_cost;
@@ -15,14 +17,14 @@ use chia_bls::PublicKey;
 use chia_protocol::{Bytes, SpendBundle};
 
 use clvm_utils::tree_hash;
+use clvmr::NodePtr;
 use clvmr::allocator::Allocator;
-use clvmr::chia_dialect::ChiaDialect;
+use clvmr::chia_dialect::{ChiaDialect, ClvmFlags};
 use clvmr::reduction::Reduction;
 use clvmr::run_program::run_program;
 use clvmr::serde::intern;
 use clvmr::serde::node_from_bytes;
 use clvmr::serde::node_from_bytes_backrefs;
-use clvmr::NodePtr;
 
 const QUOTE_BYTES: usize = 2;
 
@@ -57,7 +59,7 @@ pub fn run_spendbundle(
     // below is an adapted version of the code from run_block_generators::run_block_generator2()
     // it assumes no block references are passed in
     let mut cost_left = max_cost;
-    let dialect = ChiaDialect::new(flags);
+    let dialect = ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
     let mut ret = SpendBundleConditions::default();
     let mut state = ParseState::default();
     // We don't pay the size cost (nor execution cost) of being wrapped by a
@@ -254,7 +256,7 @@ mod tests {
 
         let generator = node_from_bytes_backrefs(&mut a, generator).expect("node_from_bytes");
         let args = setup_generator_args(&mut a, block_refs, 0).expect("setup_generator_args");
-        let dialect = ChiaDialect::new(MEMPOOL_MODE);
+        let dialect = ChiaDialect::new(ClvmFlags::from_bits_truncate(MEMPOOL_MODE));
         let Reduction(_, mut all_spends) =
             run_program(&mut a, &dialect, generator, args, 11_000_000_000).expect("run_program");
 

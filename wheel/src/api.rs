@@ -77,7 +77,6 @@ use crate::run_program::{run_chia_program, serialized_length, serialized_length_
 use chia_consensus::fast_forward::fast_forward_singleton as native_ff;
 use chia_consensus::get_puzzle_and_solution::get_puzzle_and_solution_for_coin as parse_puzzle_solution;
 use chia_consensus::validation_error::ValidationErr;
-use clvmr::ChiaDialect;
 use clvmr::allocator::NodePtr;
 use clvmr::cost::Cost;
 use clvmr::error::EvalErr;
@@ -85,6 +84,7 @@ use clvmr::reduction::Reduction;
 use clvmr::run_program;
 use clvmr::serde::is_canonical_serialization;
 use clvmr::serde::{node_from_bytes, node_from_bytes_backrefs, node_to_bytes};
+use clvmr::{ChiaDialect, ClvmFlags};
 
 use chia_bls::{
     BlsCache, DerivableKey, G1Element, GTElement, PublicKey, SecretKey, Signature,
@@ -184,7 +184,7 @@ pub fn get_puzzle_and_solution_for_coin<'a>(
         .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
     let args = node_from_bytes_backrefs(&mut allocator, args)
         .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
-    let dialect = &ChiaDialect::new(flags);
+    let dialect = &ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
 
     let (puzzle, solution) = py
         .detach(|| -> Result<(NodePtr, NodePtr), EvalErr> {
@@ -243,7 +243,7 @@ pub fn get_puzzle_and_solution_for_coin2<'a>(
     let generator = node_from_bytes_backrefs(&mut allocator, generator.as_ref())
         .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
     let args = setup_generator_args(&mut allocator, refs, flags)?;
-    let dialect = &ChiaDialect::new(flags);
+    let dialect = &ChiaDialect::new(ClvmFlags::from_bits_truncate(flags));
 
     let (puzzle, solution) = py
         .detach(|| -> Result<(NodePtr, NodePtr), EvalErr> {

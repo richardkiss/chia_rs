@@ -13,7 +13,7 @@ use clap::Parser;
 use clvm_traits::{FromClvm, ToClvm};
 use clvm_utils::CurriedProgram;
 use clvm_utils::tree_hash;
-use clvmr::{Allocator, allocator::NodePtr};
+use clvmr::{Allocator, ChiaDialect, ClvmFlags, allocator::NodePtr};
 
 /// Run a puzzle given a solution and print the resulting conditions
 #[derive(Parser, Debug)]
@@ -287,7 +287,7 @@ fn main() {
 
     println!("Spending {:?}", &spend.coin);
     println!("   coin-id: {}\n", hex::encode(spend.coin.coin_id()));
-    let dialect = ChiaDialect::new(0);
+    let dialect = ChiaDialect::new(ClvmFlags::empty());
     let Reduction(_clvm_cost, conditions) =
         match run_program(&mut a, &dialect, puzzle, solution, 11_000_000_000) {
             Ok(r) => r,

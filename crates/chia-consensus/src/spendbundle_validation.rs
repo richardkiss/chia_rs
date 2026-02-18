@@ -8,8 +8,8 @@ use chia_bls::GTElement;
 use chia_bls::{aggregate_verify_gt, hash_to_g2};
 use chia_protocol::SpendBundle;
 use chia_sha2::Sha256;
-use clvmr::chia_dialect::ClvmFlags;
 use clvmr::NodePtr;
+use clvmr::chia_dialect::ClvmFlags;
 
 // type definition makes clippy happy
 pub type ValidationPair = ([u8; 32], GTElement);
