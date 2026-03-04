@@ -8,8 +8,32 @@ const COEF_A: u64 = 2;
 const COEF_P: u64 = 3; // Changed from 2 to 3 to ensure size_component ≥ serde_2026_bytes
 const COEF_S: u64 = 1;
 const COEF_I: u64 = 8;
-const SIZE_COST_PER_BYTE: u64 = 6000;
-const SHA_COST_PER_UNIT: u64 = 4500;
+
+// Pure storage model: SIZE_COST_PER_BYTE = 12000, SHA_COST_PER_UNIT = 0
+//
+// This returns to the philosophy of the original pre-HF2 model (COST_PER_BYTE = 12000)
+// by charging only for the size component and setting SHA cost to zero.
+//
+// Pros:
+// - Simpler: single coefficient, no SHA cost accounting needed
+// - Back to pre-HF2 philosophy: charge for storage, not computation
+// - size_component naturally correlates with SHA cost (pair-heavy trees have high sha AND high size)
+// - DoS safe: worst-case SHA CPU is ~37ms at SIZE=12000 (measured on 2012 Celeron)
+// - Structural bound: sha_cost/size_component ≤ 3.33 (pair-only tree), so SHA CPU is bounded by size budget
+//
+// Cons:
+// - ~20% higher base cost for typical generators vs split model (6000, 4500)
+// - Lower effective TPS for typical transactions
+// - Doesn't explicitly charge for SHA computation — relies on structural bound to prevent DoS
+//
+// Alternative split model (6000, 4500) offers ~20% better TPS by explicitly charging for SHA work,
+// but adds complexity with two coefficients. The SHA cost accounting is somewhat redundant given
+// the structural bound.
+//
+// Reference: docs/SERDE2026_UPPER_BOUND.md in generator-identity-hf-analysis repo, and
+// digested/pure-storage-model-analysis-corrected.md in CONTROL-CENTER.
+const SIZE_COST_PER_BYTE: u64 = 12000;
+const SHA_COST_PER_UNIT: u64 = 0;
 
 /// Compute total generator cost from an interned tree in one pass.
 #[inline]
@@ -44,7 +68,7 @@ mod tests {
         let allocator = Allocator::new();
         let node = allocator.nil();
         let tree = intern(&allocator, node).unwrap();
-        assert_eq!(total_cost_from_tree(&tree), 52_500);
+        assert_eq!(total_cost_from_tree(&tree), 24_000);
     }
 
     #[test]
@@ -54,7 +78,7 @@ mod tests {
         let right = allocator.new_atom(&[4, 5, 6]).unwrap();
         let node = allocator.new_pair(left, right).unwrap();
         let tree = intern(&allocator, node).unwrap();
-        assert_eq!(total_cost_from_tree(&tree), 204_000);
+        assert_eq!(total_cost_from_tree(&tree), 156_000);
     }
 
     #[test]
@@ -63,7 +87,7 @@ mod tests {
         let atom = allocator.new_atom(&[42]).unwrap();
         let node = allocator.new_pair(atom, atom).unwrap();
         let tree = intern(&allocator, node).unwrap();
-        assert_eq!(total_cost_from_tree(&tree), 121_500);
+        assert_eq!(total_cost_from_tree(&tree), 72_000);
     }
 
     #[test]
@@ -72,6 +96,6 @@ mod tests {
         let atom = allocator.new_atom(&[1, 2, 3, 4, 5]).unwrap();
         let node = allocator.new_pair(atom, allocator.nil()).unwrap();
         let tree = intern(&allocator, node).unwrap();
-        assert_eq!(total_cost_from_tree(&tree), 198_000);
+        assert_eq!(total_cost_from_tree(&tree), 144_000);
     }
 }
