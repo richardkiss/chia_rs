@@ -275,9 +275,8 @@ fn run_generator(#[case] name: &str) {
     let mut write_back = format!("{}\n", hex::encode(&generator));
     let mut last_output = String::new();
 
-    for (orig_flags, expected) in zip(&[ConsensusFlags::empty(), MEMPOOL_MODE], expected) {
-        let is_mempool = orig_flags.contains(MEMPOOL_MODE);
-        let mut flags = *orig_flags - ConsensusFlags::LIMIT_HEAP;
+    for (flags, expected) in zip(&[ConsensusFlags::empty(), MEMPOOL_MODE], expected) {
+        let mut flags = *flags;
         if name == "aa-million-messages" || name == "aa-million-message-spends" {
             // this test requires running after hard fork 2, where the COST_CONDITIONS
             // flag is set
@@ -389,7 +388,7 @@ fn run_generator(#[case] name: &str) {
         };
 
         if UPDATE_TESTS {
-            if is_mempool {
+            if flags.contains(MEMPOOL_MODE) {
                 if output != last_output {
                     write_back.push_str(&format!("STRICT:\n{output}"));
                 }
