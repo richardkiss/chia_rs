@@ -242,9 +242,12 @@ where
 
     let (mut a, base_cost, program) = if flags.contains(ConsensusFlags::INTERNED_GENERATOR) {
         let mut decode_allocator = Allocator::new();
-        let program_node =
-            node_from_bytes_auto(&mut decode_allocator, program, DeserializeOptions::default())
-                .map_err(|_| ValidationErr(NodePtr::NIL, ErrorCode::GeneratorRuntimeError))?;
+        let program_node = node_from_bytes_auto(
+            &mut decode_allocator,
+            program,
+            DeserializeOptions::default(),
+        )
+        .map_err(|_| ValidationErr(NodePtr::NIL, ErrorCode::GeneratorRuntimeError))?;
         let interned = intern_tree(&decode_allocator, program_node)
             .map_err(|_| ValidationErr(NodePtr::NIL, ErrorCode::GeneratorRuntimeError))?;
         let cost = total_cost_from_tree(&interned);

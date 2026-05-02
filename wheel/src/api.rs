@@ -190,9 +190,8 @@ pub fn get_puzzle_and_solution_for_coin<'a>(
     let program = py_to_slice::<'a>(program);
     let args = py_to_slice::<'a>(args);
 
-    let program =
-        node_from_bytes_auto(&mut allocator, program, DeserializeOptions::default())
-            .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
+    let program = node_from_bytes_auto(&mut allocator, program, DeserializeOptions::default())
+        .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
     let args = node_from_bytes_auto(&mut allocator, args, DeserializeOptions::default())
         .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
     let dialect = &ChiaDialect::new(flags.to_clvm_flags());
@@ -251,9 +250,12 @@ pub fn get_puzzle_and_solution_for_coin2<'a>(
         py_to_slice::<'a>(buf)
     });
 
-    let generator =
-        node_from_bytes_auto(&mut allocator, generator.as_ref(), DeserializeOptions::default())
-            .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
+    let generator = node_from_bytes_auto(
+        &mut allocator,
+        generator.as_ref(),
+        DeserializeOptions::default(),
+    )
+    .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
     let args = setup_generator_args(&mut allocator, refs, flags)?;
     let dialect = &ChiaDialect::new(flags.to_clvm_flags());
 

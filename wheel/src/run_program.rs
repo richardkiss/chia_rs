@@ -45,9 +45,8 @@ pub fn run_chia_program(
     let flags = flags.to_clvm_flags();
 
     let reduction = (|| -> PyResult<Response> {
-        let program =
-            node_from_bytes_auto(&mut allocator, program, DeserializeOptions::default())
-                .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
+        let program = node_from_bytes_auto(&mut allocator, program, DeserializeOptions::default())
+            .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
         let args = node_from_bytes_auto(&mut allocator, args, DeserializeOptions::default())
             .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
         let dialect = ChiaDialect::new(flags);
