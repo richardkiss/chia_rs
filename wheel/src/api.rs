@@ -75,6 +75,7 @@ use crate::run_program::{run_chia_program, serialized_length, serialized_length_
 
 use chia_consensus::fast_forward::fast_forward_singleton as native_ff;
 use chia_consensus::get_puzzle_and_solution::get_puzzle_and_solution_for_coin as parse_puzzle_solution;
+use chia_consensus::serde_2026::node_from_bytes_auto;
 use chia_consensus::validation_error::ValidationErr;
 use clvmr::ChiaDialect;
 use clvmr::allocator::NodePtr;
@@ -83,7 +84,7 @@ use clvmr::error::EvalErr;
 use clvmr::reduction::Reduction;
 use clvmr::run_program;
 use clvmr::serde::is_canonical_serialization;
-use clvmr::serde::{DeserializeOptions, node_from_bytes, node_from_bytes_auto, node_to_bytes};
+use clvmr::serde::{node_from_bytes, node_to_bytes};
 
 use chia_bls::{
     BlsCache, DerivableKey, G1Element, GTElement, PublicKey, SecretKey, Signature,
@@ -134,11 +135,9 @@ pub fn tree_hash<'a>(py: Python<'a>, blob: PyBuffer<u8>) -> PyResult<Bound<'a, P
 
 #[pyfunction]
 pub fn tree_hash_auto<'a>(py: Python<'a>, blob: PyBuffer<u8>) -> PyResult<Bound<'a, PyAny>> {
-    use clvmr::serde::{DeserializeOptions, node_from_bytes_auto};
     let slice = py_to_slice::<'a>(blob);
     let mut a = clvmr::Allocator::new();
-    let node =
-        node_from_bytes_auto(&mut a, slice, DeserializeOptions::default()).map_err(map_pyerr)?;
+    let node = node_from_bytes_auto(&mut a, slice).map_err(map_pyerr)?;
     let hash = clvm_utils::tree_hash(&a, node);
     ChiaToPython::to_python(&Bytes32::from(&hash.into()), py)
 }
@@ -190,10 +189,10 @@ pub fn get_puzzle_and_solution_for_coin<'a>(
     let program = py_to_slice::<'a>(program);
     let args = py_to_slice::<'a>(args);
 
-    let program = node_from_bytes_auto(&mut allocator, program, DeserializeOptions::default())
+    let program = node_from_bytes_auto(&mut allocator, program)
         .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
-    let args = node_from_bytes_auto(&mut allocator, args, DeserializeOptions::default())
-        .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
+    let args =
+        node_from_bytes_auto(&mut allocator, args).map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
     let dialect = &ChiaDialect::new(flags.to_clvm_flags());
 
     let (puzzle, solution) = py
@@ -250,12 +249,8 @@ pub fn get_puzzle_and_solution_for_coin2<'a>(
         py_to_slice::<'a>(buf)
     });
 
-    let generator = node_from_bytes_auto(
-        &mut allocator,
-        generator.as_ref(),
-        DeserializeOptions::default(),
-    )
-    .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
+    let generator = node_from_bytes_auto(&mut allocator, generator.as_ref())
+        .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
     let args = setup_generator_args(&mut allocator, refs, flags)?;
     let dialect = &ChiaDialect::new(flags.to_clvm_flags());
 

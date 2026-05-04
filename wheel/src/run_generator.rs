@@ -9,9 +9,10 @@ use chia_consensus::run_block_generator::run_block_generator2 as native_run_bloc
 use chia_consensus::validation_error::ValidationErr;
 use chia_protocol::{Bytes, Bytes32, Coin};
 
+use chia_consensus::serde_2026::node_from_bytes_auto;
 use clvmr::allocator::Allocator;
 use clvmr::cost::Cost;
-use clvmr::serde::{DeserializeOptions, intern_tree, node_from_bytes_auto};
+use clvmr::serde::intern_tree;
 
 use pyo3::PyResult;
 use pyo3::buffer::PyBuffer;
@@ -151,7 +152,7 @@ pub fn additions_and_removals<'a>(
 pub fn generator_interned_weight(program: PyBuffer<u8>) -> PyResult<u64> {
     let program = py_to_slice(program);
     let mut a = Allocator::new();
-    let node = node_from_bytes_auto(&mut a, program, DeserializeOptions::default())
+    let node = node_from_bytes_auto(&mut a, program)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("bad generator: {e}")))?;
     let tree = intern_tree(&a, node)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("intern failed: {e}")))?;

@@ -1,15 +1,13 @@
 use crate::error::{map_pyerr, map_pyerr_w_ptr};
 use chia_consensus::allocator::make_allocator;
 use chia_consensus::flags::ConsensusFlags;
+use chia_consensus::serde_2026::node_from_bytes_auto;
 use chia_protocol::LazyNode;
 use clvmr::chia_dialect::ChiaDialect;
 use clvmr::cost::Cost;
 use clvmr::reduction::Response;
 use clvmr::run_program::run_program;
-use clvmr::serde::{
-    DeserializeOptions, node_from_bytes_auto, serialized_length_from_bytes,
-    serialized_length_from_bytes_trusted,
-};
+use clvmr::serde::{serialized_length_from_bytes, serialized_length_from_bytes_trusted};
 use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
 use std::rc::Rc;
@@ -45,9 +43,9 @@ pub fn run_chia_program(
     let flags = flags.to_clvm_flags();
 
     let reduction = (|| -> PyResult<Response> {
-        let program = node_from_bytes_auto(&mut allocator, program, DeserializeOptions::default())
+        let program = node_from_bytes_auto(&mut allocator, program)
             .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
-        let args = node_from_bytes_auto(&mut allocator, args, DeserializeOptions::default())
+        let args = node_from_bytes_auto(&mut allocator, args)
             .map_err(|e| map_pyerr_w_ptr(&e, &allocator))?;
         let dialect = ChiaDialect::new(flags);
 
