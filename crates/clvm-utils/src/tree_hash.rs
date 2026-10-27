@@ -3,6 +3,7 @@ use clvmr::allocator::{Allocator, NodePtr, NodeVisitor, ObjectType, SExp};
 use clvmr::error::EvalErr;
 use clvmr::serde::node_from_bytes_backrefs;
 use hex_literal::hex;
+use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
 
@@ -70,11 +71,29 @@ pub struct TreeCache {
     // u32::MAX - 2 if the pair has been seen at least twice (this makes it a
     // candidate for memoization)
     pairs: Vec<u32>,
+    // memoized hash of each long heap atom (ObjectType::Bytes), keyed by the
+    // atom's allocator index. Atoms shorter than ATOM_MEMOIZE_THRESHOLD are
+    // re-hashed on each reference rather than stored: hashing a short atom
+    // costs a single SHA-256 compression, so re-hashing one on every reference
+    // keeps the total atom-hashing work linear in the input length. Long atoms
+    // are memoized so a tree that references the same long atom from many
+    // distinct pairs hashes it once, not once per reference (which is
+    // quadratic). This is a HashMap, not a Vec indexed by atom index: a single
+    // long atom at a high index (after many short atoms) must not force a
+    // sparse Vec sized to that index, and only long atoms are ever inserted.
+    atom_hashes: HashMap<u32, TreeHash>,
 }
 
 const NOT_VISITED: u32 = u32::MAX;
 const SEEN_ONCE: u32 = u32::MAX - 1;
 const SEEN_MULTIPLE: u32 = u32::MAX - 2;
+
+// Heap atoms at least this many bytes long have their hash memoized; shorter
+// atoms are re-hashed on each reference. sha256(0x01 || atom) fits in a single
+// SHA-256 compression when atom len <= 54 (1 prefix byte + 54 data bytes + at
+// least 9 padding/length bytes == 64), so an atom of 55 bytes is the shortest
+// that spills into a second block and is worth memoizing.
+const ATOM_MEMOIZE_THRESHOLD: usize = 55;
 
 impl TreeCache {
     pub fn get(&self, n: NodePtr) -> Option<&TreeHash> {
@@ -137,6 +156,22 @@ impl TreeCache {
         } else {
             self.pairs[idx] <= SEEN_MULTIPLE
         }
+    }
+
+    /// Hash a heap atom (`NodeVisitor::Buffer`), memoizing the result for long
+    /// atoms so repeated references don't re-hash the same bytes. `node` must
+    /// be a `Bytes` atom and `bytes` its contents.
+    fn atom_hash(&mut self, node: NodePtr, bytes: &[u8]) -> TreeHash {
+        if bytes.len() < ATOM_MEMOIZE_THRESHOLD {
+            return tree_hash_atom(bytes);
+        }
+        let idx = node.index();
+        if let Some(hash) = self.atom_hashes.get(&idx) {
+            return *hash;
+        }
+        let hash = tree_hash_atom(bytes);
+        self.atom_hashes.insert(idx, hash);
+        hash
     }
 
     pub fn visit_tree(&mut self, a: &Allocator, node: NodePtr) {
@@ -264,7 +299,7 @@ pub fn tree_hash_cached(a: &Allocator, node: NodePtr, cache: &mut TreeCache) -> 
         match op {
             TreeOp::SExp(node) => match a.node(node) {
                 NodeVisitor::Buffer(bytes) => {
-                    let hash = tree_hash_atom(bytes);
+                    let hash = cache.atom_hash(node, bytes);
                     hashes.push(hash);
                 }
                 NodeVisitor::U32(val) => {
@@ -449,6 +484,88 @@ fn test_tree_hash_cached_deep_dag() {
             "{label}: hash mismatch"
         );
     }
+}
+
+#[test]
+fn test_tree_hash_cached_shared_atom_not_quadratic() {
+    // One long atom referenced as the left child of many *distinct* pairs:
+    // node_i = (A . node_{i-1}). Each pair is unique (distinct right child),
+    // so pair memoization never kicks in; without atom memoization the long
+    // atom A is re-hashed once per pair, which is O(COUNT * len(A)) —
+    // quadratic in the blob length. With atom memoization it is hashed once.
+    //
+    // COUNT * LEN is ~5e9 bytes of SHA-256 if A is re-hashed each time
+    // (seconds to minutes); if this test is ever slow, atom memoization has
+    // regressed. The expected hash is folded independently in O(COUNT).
+    const LEN: usize = 50_000;
+    const COUNT: usize = 100_000;
+
+    let mut a = Allocator::new();
+    let big = a.new_atom(&vec![0xab; LEN]).unwrap();
+    let big_hash = tree_hash_atom(&vec![0xab; LEN]);
+
+    let mut node = a.nil();
+    let mut expected = tree_hash_atom(&[]);
+    for _ in 0..COUNT {
+        node = a.new_pair(big, node).unwrap();
+        expected = tree_hash_pair(big_hash, expected);
+    }
+
+    let mut cache = TreeCache::default();
+    assert_eq!(tree_hash_cached(&a, node, &mut cache), expected);
+}
+
+#[test]
+fn test_tree_hash_cached_high_index_big_atom_small_memory() {
+    // A single long atom allocated *after* a million short atoms sits at a
+    // high allocator index. Memoization keyed by index must not size a table
+    // to that index (the old Vec-indexed-by-index version would allocate a
+    // ~40 MB sparse Vec here, and ~2 GB at mainnet's ~62M-atom ceiling). The
+    // HashMap holds one entry. We assert correctness; the RSS stays small
+    // (measured out of band).
+    const SMALL_ATOMS: usize = 1_000_000;
+    const LEN: usize = 50_000;
+    const COUNT: usize = 1000;
+
+    let mut a = Allocator::new();
+    // short heap atoms (ObjectType::Bytes), to advance the heap-atom index
+    // space so the long atom below lands at a high index
+    for i in 0..SMALL_ATOMS {
+        a.new_atom(&(i as u64).to_be_bytes()).unwrap();
+    }
+    let big = a.new_atom(&vec![0xcd; LEN]).unwrap();
+    assert!(big.index() >= SMALL_ATOMS as u32);
+
+    let big_hash = tree_hash_atom(&vec![0xcd; LEN]);
+    let mut node = a.nil();
+    let mut expected = tree_hash_atom(&[]);
+    for _ in 0..COUNT {
+        node = a.new_pair(big, node).unwrap();
+        expected = tree_hash_pair(big_hash, expected);
+    }
+
+    let mut cache = TreeCache::default();
+    assert_eq!(tree_hash_cached(&a, node, &mut cache), expected);
+}
+
+#[test]
+fn test_tree_hash_cached_short_atom_shared_matches() {
+    // Short atoms (below the memoization threshold) are re-hashed rather than
+    // stored; the result must still be correct when they are shared widely.
+    const COUNT: usize = 1000;
+    let mut a = Allocator::new();
+    let small = a.new_atom(b"abc").unwrap();
+    let small_hash = tree_hash_atom(b"abc");
+
+    let mut node = a.nil();
+    let mut expected = tree_hash_atom(&[]);
+    for _ in 0..COUNT {
+        node = a.new_pair(small, node).unwrap();
+        expected = tree_hash_pair(small_hash, expected);
+    }
+
+    let mut cache = TreeCache::default();
+    assert_eq!(tree_hash_cached(&a, node, &mut cache), expected);
 }
 
 #[test]

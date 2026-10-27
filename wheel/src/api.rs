@@ -75,7 +75,9 @@ use crate::run_program::{run_chia_program, serialized_length, serialized_length_
 
 use chia_consensus::fast_forward::fast_forward_singleton as native_ff;
 use chia_consensus::get_puzzle_and_solution::get_puzzle_and_solution_for_coin as parse_puzzle_solution;
-use chia_consensus::serde_2026::node_from_bytes_2026_trusted;
+use chia_consensus::serde_2026::{
+    max_canonical_blob_size, node_from_bytes_2026, node_from_bytes_2026_trusted,
+};
 use chia_consensus::validation_error::{ErrorCode, ValidationErr};
 use clvmr::ChiaDialect;
 use clvmr::allocator::NodePtr;
@@ -136,21 +138,39 @@ pub fn tree_hash(py: Python<'_>, blob: PyBuffer<u8>) -> PyResult<Bound<'_, PyAny
 }
 
 #[pyfunction]
-pub fn tree_hash_2026(py: Python<'_>, blob: PyBuffer<u8>) -> PyResult<Bound<'_, PyAny>> {
+pub fn tree_hash_2026(
+    py: Python<'_>,
+    blob: PyBuffer<u8>,
+    max_cost: u64,
+    cost_per_byte: u64,
+) -> PyResult<Bound<'_, PyAny>> {
     let slice = py_to_slice(&blob);
-    let mut a = clvmr::Allocator::new();
-    // Unconditional serde_2026 parse, no magic-prefix sniffing: the caller
-    // (chia-blockchain's generator_root(version=1, ...)) already knows this
-    // blob is serde_2026 from the block's version, and has already validated
-    // the block, so this is a trusted read.
-    let node = node_from_bytes_2026_trusted(&mut a, slice).map_err(map_pyerr)?;
+    // This commits to a generator *before* the generator is executed or
+    // cost-limited, so the blob is untrusted and the work must be bounded up
+    // front. `max_canonical_blob_size` is the largest wire size any generator
+    // valid at these constants can have; a larger blob can't be a valid
+    // generator, so reject it rather than hash it. Pass that bound to
+    // `node_from_bytes_2026` (the size-checked reader, not the `_trusted` one)
+    // so it also caps each atom's length while parsing.
+    //
+    // The cap is derived from `max_cost` (the block cost limit), not from the
+    // block's claimed `transactions_info.cost`: the claimed cost is attacker
+    // controlled and isn't verified until after this runs.
+    //
     // serde_2026 can encode trees whose expansion is exponential in the blob
-    // size, so the hash must be DAG-aware: tree_hash_cached memoizes shared
-    // pairs, keeping the work linear in the number of unique nodes (which
-    // parsing already bounds by the blob length). The uncached tree_hash
-    // would walk the full expansion.
-    let mut cache = clvm_utils::TreeCache::default();
-    let hash = clvm_utils::tree_hash_cached(&a, node, &mut cache);
+    // size, so the hash is DAG-aware: `tree_hash_cached` memoizes shared pairs
+    // and long atoms, keeping the work linear in the blob length. The GIL is
+    // released for the parse and hash so a large generator can't stall other
+    // Python threads.
+    let max_blob_size = max_canonical_blob_size(max_cost, cost_per_byte);
+    let hash = py
+        .detach(|| {
+            let mut a = clvmr::Allocator::new();
+            let node = node_from_bytes_2026(&mut a, slice, max_blob_size)?;
+            let mut cache = clvm_utils::TreeCache::default();
+            Ok::<_, EvalErr>(clvm_utils::tree_hash_cached(&a, node, &mut cache))
+        })
+        .map_err(map_pyerr)?;
     ChiaToPython::to_python(&Bytes32::from(&hash.into()), py)
 }
 
